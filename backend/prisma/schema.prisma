@@ -1,0 +1,115 @@
+// Nishani — online ordering data model.
+// SQLite via Prisma. Status fields use plain strings because
+// SQLite does not support Prisma enums.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// role: SUPER_ADMIN | ORDER_HANDLER | PRODUCT_MANAGER  (plain string — SQLite has no enums)
+model AdminUser {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("SUPER_ADMIN")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String
+  slug      String    @unique
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model Product {
+  id          Int            @id @default(autoincrement())
+  name        String
+  slug        String         @unique
+  description String         @default("")
+  price       Float
+  image       String? // main thumbnail (e.g. /uploads/xxx.jpg)
+  inStock     Boolean        @default(true) // false = out of stock
+  isActive    Boolean        @default(true) // false = hidden from storefront
+  featured    Boolean        @default(false)
+  categoryId  Int
+  category    Category       @relation(fields: [categoryId], references: [id])
+  images      ProductImage[] // cover / gallery images
+  orderItems  OrderItem[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+// Cover-page / gallery images for a product.
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  url       String
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// Promotional image or video shown on the storefront.
+model Offer {
+  id        Int      @id @default(autoincrement())
+  title     String
+  mediaType String   @default("image") // "image" | "video"
+  mediaUrl  String? // /uploads/xxx — optional (title-only banners allowed)
+  linkUrl   String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// Delivery zones; charge is added to the order total at checkout.
+model DeliveryArea {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  charge   Float   @default(0)
+  isActive Boolean @default(true)
+  orders   Order[]
+}
+
+// status: PENDING -> ACCEPTED -> DISPATCHED -> CLOSED  (or CANCELLED)
+model Order {
+  id             Int           @id @default(autoincrement())
+  orderNumber    String        @unique
+  customerName   String
+  phone          String
+  address        String
+  areaId         Int?
+  area           DeliveryArea? @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  areaName       String        @default("")
+  notes          String        @default("")
+  subtotal       Float         @default(0)
+  deliveryCharge Float         @default(0)
+  total          Float         @default(0)
+  status         String        @default("PENDING")
+  claimedById    Int? // admin who picked the order (null = unclaimed / still incoming)
+  claimedByName  String        @default("")
+  items          OrderItem[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// Line item — name/price are snapshotted so order history
+// survives product edits or deletion.
+model OrderItem {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   Int?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String
+  price       Float
+  quantity    Int      @default(1)
+}
