@@ -1,7 +1,12 @@
 import axios from 'axios';
 
-// All requests go to /api (proxied to the Express backend in dev).
-const api = axios.create({ baseURL: '/api' });
+// Agar website production (Vercel) par chal rahi hai toh Render ka URL use hoga, warna local dev proxy
+const isProduction = import.meta.env.PROD; 
+const BACKEND_URL = isProduction ? 'https://nishani.onrender.com' : '';
+
+const api = axios.create({ 
+  baseURL: `${BACKEND_URL}/api` 
+});
 
 // Attach the admin JWT to every request when one is stored.
 api.interceptors.request.use((config) => {
