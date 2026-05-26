@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../lib/prisma');
 const { requireRole } = require('../middleware/auth');
 const { emitToBranch } = require('../socket');
+const { resolveBranchForOrder } = require('../utils/routing');
 const {
   asyncHandler,
   generateOrderNumber,
@@ -27,7 +28,17 @@ function sameBranch(admin, order) {
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { customerName, phone, address, areaId, notes, items } = req.body;
+    const {
+      customerName,
+      phone,
+      address,
+      areaId,
+      notes,
+      items,
+      lat,
+      lng,
+      estimatedMinutes,
+    } = req.body;
     if (!customerName || !phone || !address) {
       return res.status(400).json({ error: 'Name, phone and address are required' });
     }
@@ -61,30 +72,25 @@ router.post(
       });
     }
 
-    // Resolve the delivery area. An unknown id is ignored rather than
-    // written onto the order, which would violate the foreign key.
-    let deliveryCharge = 0;
-    let areaName = '';
-    let resolvedAreaId = null;
-    let branchId = null;
-    if (areaId) {
-      const area = await prisma.deliveryArea.findUnique({ where: { id: Number(areaId) } });
-      if (area) {
-        resolvedAreaId = area.id;
-        deliveryCharge = area.charge;
-        areaName = area.name;
-        branchId = area.branchId; // route this order to the area's branch
-      }
-    }
-    // If the area has no branch yet, fall back to any active branch so the
-    // order isn't orphaned — Super Admin can re-route later if needed.
-    if (!branchId) {
-      const fallback = await prisma.branch.findFirst({
-        where: { isActive: true },
-        orderBy: { id: 'asc' },
+    // Decide which branch will fulfil this order. The home branch (the
+    // area's branch) is preferred, but if it's manually closed or has no
+    // Order Handler online, the order is transparently re-routed to the
+    // nearest operational branch.
+    const routing = await resolveBranchForOrder({
+      areaId,
+      customerLat: lat != null && lat !== '' ? Number(lat) : null,
+      customerLng: lng != null && lng !== '' ? Number(lng) : null,
+    });
+    if (!routing.branch) {
+      return res.status(503).json({
+        error: 'No branches are currently open and online. Please try again in a few minutes.',
       });
-      branchId = fallback?.id || null;
     }
+    const area = routing.area;
+    const resolvedAreaId = area ? area.id : null;
+    const deliveryCharge = area ? area.charge : 0;
+    const areaName = area ? area.name : '';
+    const branchId = routing.branch.id;
 
     const order = await prisma.order.create({
       data: {
@@ -100,6 +106,13 @@ router.post(
         deliveryCharge,
         total: subtotal + deliveryCharge,
         status: 'PENDING',
+        // Snapshots of the live location + ETA the customer agreed to.
+        customerLat: lat != null && lat !== '' ? Number(lat) : null,
+        customerLng: lng != null && lng !== '' ? Number(lng) : null,
+        estimatedMinutes:
+          estimatedMinutes != null && estimatedMinutes !== ''
+            ? Number(estimatedMinutes)
+            : null,
         items: { create: lineItems },
       },
       include: { items: true, branch: true },

@@ -470,6 +470,40 @@ textarea { resize: vertical; }
   margin: 8px 0 16px;
 }
 
+/* ---- Live delivery-time estimate ---- */
+.eta-card {
+  background: #f7fbfc;
+  border: 1px solid #cfe7eb;
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  margin: 6px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.eta-main { display: flex; gap: 12px; align-items: center; }
+.eta-icon { font-size: 1.7rem; }
+.eta-using-loc { color: var(--accent); font-size: 0.85rem; font-weight: 600; }
+.eta-loc-error { margin: 0; }
+.eta-notice {
+  font-size: 0.88rem;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0;
+}
+.eta-redirect { background: #fff5e0; color: #8a5a0b; border: 1px solid #f0d79a; }
+
+/* ---- ETA banner on the order-tracking page ---- */
+.eta-banner {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  border-radius: 9px;
+  padding: 11px 14px;
+  margin: 14px 0;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
 /* ---- Order tracking ---- */
 .track-form { display: flex; gap: 10px; max-width: 520px; margin-bottom: 24px; }
 .track-form input { margin: 0; }

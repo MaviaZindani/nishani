@@ -80,14 +80,21 @@ export default function OrderTrack() {
           {cancelled ? (
             <div className="alert alert-error">This order was cancelled.</div>
           ) : (
-            <ol className="track-steps">
-              {STEPS.map((step, i) => (
-                <li key={step} className={i <= currentStep ? 'done' : ''}>
-                  <span className="track-dot" />
-                  {STEP_LABEL[step]}
-                </li>
-              ))}
-            </ol>
+            <>
+              {order.estimatedMinutes && order.status !== 'CLOSED' && (
+                <div className="eta-banner">
+                  ⏱ Estimated delivery: <strong>~{order.estimatedMinutes} minutes</strong>
+                </div>
+              )}
+              <ol className="track-steps">
+                {STEPS.map((step, i) => (
+                  <li key={step} className={i <= currentStep ? 'done' : ''}>
+                    <span className="track-dot" />
+                    {STEP_LABEL[step]}
+                  </li>
+                ))}
+              </ol>
+            </>
           )}
 
           <div className="track-items">

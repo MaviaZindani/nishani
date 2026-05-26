@@ -189,6 +189,48 @@
 .data-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
 .data-table input { margin: 0; max-width: 100%; }
 .cell-narrow { width: 110px; }
+.cell-coords { width: 150px; }
+.cell-coords input { margin-bottom: 4px; font-size: 0.8rem; padding: 6px 8px; }
+.cell-coords input:last-child { margin-bottom: 0; }
+
+/* ---- Branch flags + live status in the Branches table ---- */
+.branch-flags { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.branch-flags .check { margin: 0; font-size: 0.85rem; }
+.branch-live { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; }
+.live-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+.live-on  { background: #dcfce7; color: #15803d; }
+.live-off { background: #fde8e8; color: #b91c1c; }
+
+/* ---- Branch toggle in the admin topbar (Order Handlers) ---- */
+.branch-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+}
+.branch-toggle:hover { border-color: var(--brand); }
+.branch-toggle:disabled { opacity: 0.6; cursor: wait; }
+.branch-toggle-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.branch-toggle.is-closed { background: #fde8e8; border-color: #f3c0c0; color: #b91c1c; }
+.branch-toggle.is-closed .branch-toggle-dot { background: var(--danger); }
 .cell-product { display: flex; align-items: center; gap: 10px; }
 .cell-thumb {
   width: 42px;

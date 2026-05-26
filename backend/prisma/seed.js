@@ -4,10 +4,11 @@ const prisma = require('../src/lib/prisma');
 const { slugify, generateOrderNumber } = require('../src/utils/helpers');
 
 // Sample physical branches. Add more via the admin portal once running.
+// (lat, lng) used to compute live delivery ETAs from the customer's location.
 const BRANCHES = [
-  ['Garden Branch', 'Karachi', 'M.A. Jinnah Road, Garden', '021-35000111'],
-  ['Clifton Branch', 'Karachi', 'Khayaban-e-Iqbal, Clifton', '021-35000222'],
-  ['DHA Branch', 'Karachi', 'Khayaban-e-Saadi, DHA Phase 4', '021-35000333'],
+  ['Garden Branch', 'Karachi', 'M.A. Jinnah Road, Garden', '021-35000111', 24.8800, 67.0140],
+  ['Clifton Branch', 'Karachi', 'Khayaban-e-Iqbal, Clifton', '021-35000222', 24.8104, 67.0314],
+  ['DHA Branch', 'Karachi', 'Khayaban-e-Saadi, DHA Phase 4', '021-35000333', 24.8024, 67.0660],
 ];
 
 // Each delivery area is fulfilled by exactly one branch.
@@ -120,9 +121,9 @@ async function main() {
 
   // --- Branches ----------------------------------------------------------
   const branchByName = {};
-  for (const [name, city, address, phone] of BRANCHES) {
+  for (const [name, city, address, phone, lat, lng] of BRANCHES) {
     const branch = await prisma.branch.create({
-      data: { name, slug: slugify(name), city, address, phone },
+      data: { name, slug: slugify(name), city, address, phone, lat, lng },
     });
     branchByName[name] = branch;
   }

@@ -21,9 +21,10 @@ model Branch {
   city      String         @default("")
   address   String         @default("")
   phone     String         @default("")
-  lat       Float? // reserved for future coordinate-based routing
+  lat       Float? // used to compute live delivery ETAs + routing distance
   lng       Float?
-  isActive  Boolean        @default(true)
+  isActive  Boolean        @default(true) // permanent enable/disable
+  isOpen    Boolean        @default(true) // short-term "accepting orders right now"
   createdAt DateTime       @default(now())
   admins    AdminUser[]
   orders    Order[]
@@ -123,6 +124,10 @@ model Order {
   claimedByName  String        @default("")
   branchId       Int? // which branch fulfils this order (derived from area.branchId)
   branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  // Customer's live location (optional) + the ETA shown at checkout — both snapshotted.
+  customerLat      Float?
+  customerLng      Float?
+  estimatedMinutes Int?
   items          OrderItem[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

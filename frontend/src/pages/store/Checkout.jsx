@@ -16,12 +16,61 @@ export default function Checkout() {
     areaId: '',
     notes: '',
   });
+
+  // Live location + delivery-time estimate.
+  const [coords, setCoords] = useState(null);
+  const [eta, setEta] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState('');
+
   const [error, setError] = useState('');
   const [placing, setPlacing] = useState(false);
 
   useEffect(() => {
     api.get('/areas').then((r) => setAreas(r.data)).catch(() => {});
   }, []);
+
+  // Whenever the area changes (or the customer's coords arrive),
+  // refetch the live ETA so the number on screen stays honest.
+  useEffect(() => {
+    if (!form.areaId) {
+      setEta(null);
+      return;
+    }
+    const params = { areaId: form.areaId };
+    if (coords) {
+      params.lat = coords.lat;
+      params.lng = coords.lng;
+    }
+    api.get('/eta', { params })
+      .then((r) => setEta(r.data))
+      .catch(() => setEta(null));
+  }, [form.areaId, coords]);
+
+  // Ask the browser for the customer's current coordinates.
+  function requestLocation() {
+    setLocError('');
+    if (!('geolocation' in navigator)) {
+      setLocError('Your browser does not support live location.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocating(false);
+      },
+      (err) => {
+        setLocError(
+          err.code === 1
+            ? 'Location permission was blocked. Open site settings to allow it.'
+            : 'Could not get your location — try again.'
+        );
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -46,6 +95,9 @@ export default function Checkout() {
         ...form,
         areaId: form.areaId || null,
         items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        lat: coords?.lat,
+        lng: coords?.lng,
+        estimatedMinutes: eta?.minutes,
       });
       clear();
       navigate(`/track/${data.orderNumber}`);
@@ -86,6 +138,54 @@ export default function Checkout() {
               ))}
             </select>
           </label>
+
+          {form.areaId && (
+            <div className="eta-card">
+              <div className="eta-main">
+                <span className="eta-icon" aria-hidden>⏱</span>
+                <div>
+                  <strong>
+                    Estimated delivery: ~{eta?.minutes ?? '—'} min
+                  </strong>
+                  {eta?.precision === 'live' && eta.distanceKm != null && (
+                    <div className="muted">
+                      {eta.distanceKm} km from {eta.branch?.name || 'your branch'}
+                    </div>
+                  )}
+                  {eta?.precision === 'default' && eta?.available !== false && (
+                    <div className="muted">
+                      Default estimate — share your live location for a more accurate time.
+                    </div>
+                  )}
+                </div>
+              </div>
+              {eta?.redirected && eta?.branch && (
+                <div className="eta-notice eta-redirect">
+                  {eta.homeBranch?.name || 'Your usual branch'} is currently closed —
+                  your order will be delivered from <strong>{eta.branch.name}</strong>.
+                </div>
+              )}
+              {eta && eta.available === false && (
+                <div className="alert alert-error eta-notice">
+                  No branches are open right now. Please try again in a few minutes.
+                </div>
+              )}
+              {!coords ? (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={requestLocation}
+                  disabled={locating}
+                >
+                  {locating ? 'Locating…' : '📍 Use my live location'}
+                </button>
+              ) : (
+                <span className="eta-using-loc">📍 Using your live location</span>
+              )}
+              {locError && <div className="alert alert-error eta-loc-error">{locError}</div>}
+            </div>
+          )}
+
           <label>
             Order notes (optional)
             <textarea value={form.notes} onChange={update('notes')} rows={2} />
@@ -94,8 +194,15 @@ export default function Checkout() {
           <div className="payment-note">
             💵 Payment method: <strong>Cash on Delivery</strong>
           </div>
-          <button className="btn btn-block" disabled={placing}>
-            {placing ? 'Placing order…' : `Place order — ${money(total)}`}
+          <button
+            className="btn btn-block"
+            disabled={placing || (eta && eta.available === false)}
+          >
+            {placing
+              ? 'Placing order…'
+              : eta && eta.available === false
+                ? 'All branches closed'
+                : `Place order — ${money(total)}`}
           </button>
         </form>
 
@@ -121,6 +228,12 @@ export default function Checkout() {
             <span>Total</span>
             <span>{money(total)}</span>
           </div>
+          {eta?.minutes && (
+            <div className="summary-row muted">
+              <span>Arrives in</span>
+              <span>~{eta.minutes} min</span>
+            </div>
+          )}
         </aside>
       </div>
     </div>

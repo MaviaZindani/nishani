@@ -1,12 +1,15 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { countOnlineHandlers } = require('../socket');
 const { asyncHandler, makeUniqueSlug, ROLES } = require('../utils/helpers');
 
 const router = express.Router();
 
+// Enrich a branch with its current live handler count.
+const withOnline = (b) => ({ ...b, onlineHandlers: countOnlineHandlers(b.id) });
+
 // GET /api/branches — every signed-in admin can read (for dropdowns).
-// CRUD is restricted to Super Admin below.
 router.get(
   '/',
   requireAuth,
@@ -18,7 +21,7 @@ router.get(
         _count: { select: { admins: true, orders: true, areas: true } },
       },
     });
-    res.json(branches);
+    res.json(branches.map(withOnline));
   })
 );
 
@@ -27,7 +30,7 @@ router.post(
   '/',
   requireRole(ROLES.SUPER_ADMIN),
   asyncHandler(async (req, res) => {
-    const { name, city, address, phone, lat, lng, isActive } = req.body;
+    const { name, city, address, phone, lat, lng, isActive, isOpen } = req.body;
     if (!name) return res.status(400).json({ error: 'Branch name is required' });
     const branch = await prisma.branch.create({
       data: {
@@ -39,9 +42,10 @@ router.post(
         lat: lat != null && lat !== '' ? Number(lat) : null,
         lng: lng != null && lng !== '' ? Number(lng) : null,
         isActive: isActive !== false,
+        isOpen: isOpen !== false,
       },
     });
-    res.status(201).json(branch);
+    res.status(201).json(withOnline(branch));
   })
 );
 
@@ -51,7 +55,7 @@ router.put(
   requireRole(ROLES.SUPER_ADMIN),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const { name, city, address, phone, lat, lng, isActive } = req.body;
+    const { name, city, address, phone, lat, lng, isActive, isOpen } = req.body;
     const data = {};
     if (name !== undefined) {
       data.name = name.trim();
@@ -63,7 +67,32 @@ router.put(
     if (lat !== undefined) data.lat = lat == null || lat === '' ? null : Number(lat);
     if (lng !== undefined) data.lng = lng == null || lng === '' ? null : Number(lng);
     if (isActive !== undefined) data.isActive = !!isActive;
-    res.json(await prisma.branch.update({ where: { id }, data }));
+    if (isOpen !== undefined) data.isOpen = !!isOpen;
+    const updated = await prisma.branch.update({ where: { id }, data });
+    res.json(withOnline(updated));
+  })
+);
+
+// PATCH /api/branches/:id/open — toggle the manual open/closed flag.
+// Allowed for the Super Admin, or for an Order Handler if it's their own
+// branch (so handlers can pause/resume from the admin topbar).
+router.patch(
+  '/:id/open',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const { admin } = req;
+    if (admin.role !== ROLES.SUPER_ADMIN) {
+      if (admin.role !== ROLES.ORDER_HANDLER || admin.branchId !== id) {
+        return res.status(403).json({ error: 'You may only toggle your own branch' });
+      }
+    }
+    const { isOpen } = req.body;
+    const updated = await prisma.branch.update({
+      where: { id },
+      data: { isOpen: !!isOpen },
+    });
+    res.json(withOnline(updated));
   })
 );
 

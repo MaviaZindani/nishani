@@ -50,4 +50,12 @@ function emitToBranch(branchId, event, payload) {
   io.to(targets).emit(event, payload);
 }
 
-module.exports = { initSocket, emitToBranch };
+// How many Order Handlers are currently connected for this branch.
+// Drives auto-close behaviour: when this hits 0 the branch can't take orders.
+function countOnlineHandlers(branchId) {
+  if (!io || !branchId) return 0;
+  const room = io.sockets.adapter.rooms.get(branchRoom(branchId));
+  return room ? room.size : 0;
+}
+
+module.exports = { initSocket, emitToBranch, countOnlineHandlers };

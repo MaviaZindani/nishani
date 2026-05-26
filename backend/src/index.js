@@ -27,6 +27,7 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/offers', require('./routes/offers'));
 app.use('/api/areas', require('./routes/areas'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/eta', require('./routes/eta'));
 app.use('/api/reports', require('./routes/reports'));
 
 // Unknown API route.

@@ -128,6 +128,23 @@ export default function OrderDetail() {
                 <dd>{order.notes}</dd>
               </>
             )}
+            {order.estimatedMinutes && (
+              <>
+                <dt>ETA</dt>
+                <dd>
+                  ~{order.estimatedMinutes} min
+                  {order.customerLat && order.customerLng && (
+                    <span className="muted">
+                      {' '}· <a
+                        href={`https://www.google.com/maps/?q=${order.customerLat},${order.customerLng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >open in Maps</a>
+                    </span>
+                  )}
+                </dd>
+              </>
+            )}
             <dt>Payment</dt>
             <dd>Cash on Delivery</dd>
           </dl>
