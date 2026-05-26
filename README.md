@@ -91,16 +91,21 @@ their role allows; the backend enforces every rule independently.
 Order Handlers and Product/Offer Managers support **multiple accounts** — the
 Super Admin creates as many as the business needs.
 
-## Live order handling (realtime)
+## Live order handling (realtime + multi-branch)
 
-The Orders screen has a live **Incoming Orders** feed (powered by Socket.IO):
+The platform supports **multiple physical branches**. Each delivery area is
+mapped to a branch; an order placed in that area is routed to that branch.
 
+- Order Handlers belong to **one** branch and only see — in their feed, on the
+  Orders table, in the toast notifications — orders routed to it.
+- Super Admins see every branch's events.
 - The moment a customer checks out, the order **drops in as a card** on every
-  Order Handler's screen at once.
-- A handler clicks **"Pick this order"** to claim it.
-- The card instantly **disappears from every other handler's screen** — so two
-  handlers never work the same order. If two click at the same moment, only the
-  first succeeds; the other sees *"already picked by …"*.
+  Order Handler of that branch (and every Super Admin), in real time.
+- A handler clicks **"Pick this order"** to claim it. It instantly
+  **disappears from every other handler in that branch**. If two click at the
+  same moment, only the first wins; the other sees *"already picked by …"*.
+- A **site-wide alert** (toast + audio ping) fires on *any* admin page — so a
+  handler viewing the Dashboard or Reports still hears a new order arrive.
 
 ## How an order flows
 

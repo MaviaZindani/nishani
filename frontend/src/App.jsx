@@ -15,12 +15,14 @@ import NotFound from './pages/store/NotFound.jsx';
 import RequireAdmin from './components/admin/RequireAdmin.jsx';
 import RequireRole from './components/admin/RequireRole.jsx';
 import AdminLayout from './components/admin/AdminLayout.jsx';
+import { AdminSocketProvider } from './context/AdminSocketContext.jsx';
 import Login from './pages/admin/Login.jsx';
 import Dashboard from './pages/admin/Dashboard.jsx';
 import AdminProducts from './pages/admin/Products.jsx';
 import ProductForm from './pages/admin/ProductForm.jsx';
 import AdminCategories from './pages/admin/Categories.jsx';
 import AdminAreas from './pages/admin/Areas.jsx';
+import AdminBranches from './pages/admin/Branches.jsx';
 import AdminOrders from './pages/admin/Orders.jsx';
 import OrderDetail from './pages/admin/OrderDetail.jsx';
 import AdminOffers from './pages/admin/Offers.jsx';
@@ -48,13 +50,17 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Route>
 
-      {/* Admin portal — RequireAdmin checks login, RequireRole checks role */}
+      {/* Admin portal — RequireAdmin checks login, AdminSocketProvider
+          gives every admin page a single shared realtime connection
+          (so toasts + audio pings fire site-wide). */}
       <Route path="/admin/login" element={<Login />} />
       <Route
         path="/admin"
         element={
           <RequireAdmin>
-            <AdminLayout />
+            <AdminSocketProvider>
+              <AdminLayout />
+            </AdminSocketProvider>
           </RequireAdmin>
         }
       >
@@ -66,6 +72,7 @@ export default function App() {
         <Route path="products/:id/edit" element={guard('productEdit', <ProductForm />)} />
         <Route path="categories" element={guard('categories', <AdminCategories />)} />
         <Route path="areas" element={guard('areas', <AdminAreas />)} />
+        <Route path="branches" element={guard('branches', <AdminBranches />)} />
         <Route path="offers" element={guard('offers', <AdminOffers />)} />
         <Route path="reports" element={guard('reports', <AdminReports />)} />
         <Route path="users" element={guard('users', <AdminUsers />)} />

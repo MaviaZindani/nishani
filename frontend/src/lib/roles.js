@@ -29,6 +29,7 @@ export const ACCESS = {
   offers: ['SUPER_ADMIN', 'PRODUCT_MANAGER'],
   reports: ['SUPER_ADMIN'],
   users: ['SUPER_ADMIN'],
+  branches: ['SUPER_ADMIN'],
 };
 
 // True when `user` (with a `.role`) may access `area`.

@@ -11,7 +11,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// A physical branch / location of the business. Orders are routed to
+// the branch that owns the customer's delivery area; Order Handlers
+// only see (and may act on) orders for the branch they belong to.
+model Branch {
+  id        Int            @id @default(autoincrement())
+  name      String
+  slug      String         @unique
+  city      String         @default("")
+  address   String         @default("")
+  phone     String         @default("")
+  lat       Float? // reserved for future coordinate-based routing
+  lng       Float?
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  admins    AdminUser[]
+  orders    Order[]
+  areas     DeliveryArea[]
+}
+
 // role: SUPER_ADMIN | ORDER_HANDLER | PRODUCT_MANAGER  (plain string — SQLite has no enums)
+// branchId: required for Order Handlers, ignored for Super Admin and Product Manager.
 model AdminUser {
   id           Int      @id @default(autoincrement())
   email        String   @unique
@@ -19,6 +39,8 @@ model AdminUser {
   passwordHash String
   role         String   @default("SUPER_ADMIN")
   isActive     Boolean  @default(true)
+  branchId     Int?
+  branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
 }
 
@@ -71,11 +93,14 @@ model Offer {
 }
 
 // Delivery zones; charge is added to the order total at checkout.
+// branchId determines which branch fulfils orders placed in this area.
 model DeliveryArea {
   id       Int     @id @default(autoincrement())
   name     String  @unique
   charge   Float   @default(0)
   isActive Boolean @default(true)
+  branchId Int?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
   orders   Order[]
 }
 
@@ -96,6 +121,8 @@ model Order {
   status         String        @default("PENDING")
   claimedById    Int? // admin who picked the order (null = unclaimed / still incoming)
   claimedByName  String        @default("")
+  branchId       Int? // which branch fulfils this order (derived from area.branchId)
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
   items          OrderItem[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

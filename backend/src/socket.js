@@ -4,17 +4,19 @@ const { ROLES } = require('./utils/helpers');
 
 let io = null;
 
-// Live order events are delivered only to this room.
-const ORDER_ROOM = 'order-handlers';
-const ROOM_ROLES = [ROLES.SUPER_ADMIN, ROLES.ORDER_HANDLER];
+// Two kinds of Socket.IO rooms drive the multi-branch live feed:
+//   - super-admins   → every Super Admin (sees every branch's events)
+//   - branch_<id>    → Order Handlers belonging to that one branch
+// Product Managers don't join either — they receive no order events.
+const SUPER_ROOM = 'super-admins';
+const branchRoom = (id) => `branch_${id}`;
 
-// Attaches a Socket.IO server to the HTTP server.
 function initSocket(httpServer) {
   io = new Server(httpServer, {
     cors: { origin: process.env.CLIENT_URL || true },
   });
 
-  // Every socket must present a valid admin JWT (sent in the handshake).
+  // JWT is read from the handshake on every connection.
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
@@ -27,19 +29,25 @@ function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    // Order Handlers and Super Admins receive the live order feed.
-    if (ROOM_ROLES.includes(socket.admin.role)) {
-      socket.join(ORDER_ROOM);
+    const { role, branchId } = socket.admin;
+    if (role === ROLES.SUPER_ADMIN) {
+      socket.join(SUPER_ROOM);
+    } else if (role === ROLES.ORDER_HANDLER && branchId) {
+      socket.join(branchRoom(branchId));
     }
+    // PMs and unassigned handlers join no room — no events delivered.
   });
 
   return io;
 }
 
-// Broadcasts an event to every connected order handler.
-// Safe no-op if called before the socket server is initialised.
-function emitOrders(event, payload) {
-  if (io) io.to(ORDER_ROOM).emit(event, payload);
+// Broadcast an order event to exactly one branch's handlers, plus every
+// Super Admin (who has visibility across all branches).
+function emitToBranch(branchId, event, payload) {
+  if (!io) return;
+  const targets = [SUPER_ROOM];
+  if (branchId) targets.push(branchRoom(branchId));
+  io.to(targets).emit(event, payload);
 }
 
-module.exports = { initSocket, emitOrders };
+module.exports = { initSocket, emitToBranch };

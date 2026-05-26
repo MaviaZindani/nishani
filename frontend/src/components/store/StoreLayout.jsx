@@ -44,6 +44,7 @@ export default function StoreLayout() {
 
           <div className="store-header-actions">
             <Link to="/track" className="header-link">Track order</Link>
+            <span style={{ margin: "0 80px" }}></span>
             <Link to="/cart" className="cart-link">
               🛒 Cart
               {count > 0 && <span className="cart-count">{count}</span>}

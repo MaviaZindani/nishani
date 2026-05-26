@@ -15,6 +15,7 @@ router.get(
     const areas = await prisma.deliveryArea.findMany({
       where: req.query.all === '1' ? {} : { isActive: true },
       orderBy: { name: 'asc' },
+      include: { branch: true },
     });
     res.json(areas);
   })
@@ -25,14 +26,16 @@ router.post(
   '/',
   requireRole(...MANAGE),
   asyncHandler(async (req, res) => {
-    const { name, charge, isActive } = req.body;
+    const { name, charge, isActive, branchId } = req.body;
     if (!name) return res.status(400).json({ error: 'Area name is required' });
     const area = await prisma.deliveryArea.create({
       data: {
         name: name.trim(),
         charge: Number(charge) || 0,
         isActive: isActive !== false,
+        branchId: branchId ? Number(branchId) : null,
       },
+      include: { branch: true },
     });
     res.status(201).json(area);
   })
@@ -43,12 +46,18 @@ router.put(
   '/:id',
   requireRole(...MANAGE),
   asyncHandler(async (req, res) => {
-    const { name, charge, isActive } = req.body;
+    const { name, charge, isActive, branchId } = req.body;
     const data = {};
     if (name !== undefined) data.name = name.trim();
     if (charge !== undefined) data.charge = Number(charge) || 0;
     if (isActive !== undefined) data.isActive = !!isActive;
-    res.json(await prisma.deliveryArea.update({ where: { id: Number(req.params.id) }, data }));
+    if (branchId !== undefined) data.branchId = branchId ? Number(branchId) : null;
+    const updated = await prisma.deliveryArea.update({
+      where: { id: Number(req.params.id) },
+      data,
+      include: { branch: true },
+    });
+    res.json(updated);
   })
 );
 

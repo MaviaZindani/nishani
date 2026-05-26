@@ -6,15 +6,21 @@ import { ROLE_OPTIONS } from '../../lib/roles.js';
 import { dateTime } from '../../lib/format.js';
 
 // One editable admin-account row.
-function UserRow({ user, currentId, onSaved, onDeleted }) {
+function UserRow({ user, branches, currentId, onSaved, onDeleted }) {
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState(user.role);
+  const [branchId, setBranchId] = useState(user.branchId || '');
   const [isActive, setIsActive] = useState(user.isActive);
   const isSelf = user.id === currentId;
 
   async function save() {
     try {
-      const { data } = await api.put(`/users/${user.id}`, { name, role, isActive });
+      const { data } = await api.put(`/users/${user.id}`, {
+        name,
+        role,
+        isActive,
+        branchId: branchId || null,
+      });
       onSaved(data);
     } catch (e) {
       alert(apiError(e));
@@ -57,6 +63,16 @@ function UserRow({ user, currentId, onSaved, onDeleted }) {
         </select>
       </td>
       <td>
+        <select value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+          <option value="">— Global —</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td>
         <label className="check">
           <input
             type="checkbox"
@@ -85,14 +101,22 @@ function UserRow({ user, currentId, onSaved, onDeleted }) {
 export default function AdminUsers() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'ORDER_HANDLER' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'ORDER_HANDLER',
+    branchId: '',
+  });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function load() {
-    const { data } = await api.get('/users');
-    setUsers(data);
+    const [u, b] = await Promise.all([api.get('/users'), api.get('/branches')]);
+    setUsers(u.data);
+    setBranches(b.data);
     setLoading(false);
   }
   useEffect(() => {
@@ -101,15 +125,17 @@ export default function AdminUsers() {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  // Create a new Order Handler / Product Manager / Super Admin account.
   async function create(e) {
     e.preventDefault();
     setError('');
     setSaving(true);
     try {
-      const { data } = await api.post('/users', form);
+      const { data } = await api.post('/users', {
+        ...form,
+        branchId: form.branchId || null,
+      });
       setUsers((prev) => [...prev, data]);
-      setForm({ name: '', email: '', password: '', role: 'ORDER_HANDLER' });
+      setForm({ name: '', email: '', password: '', role: 'ORDER_HANDLER', branchId: '' });
     } catch (err) {
       setError(apiError(err));
     } finally {
@@ -126,8 +152,8 @@ export default function AdminUsers() {
     <div>
       <h1 className="admin-h1">Admin Users</h1>
       <p className="muted">
-        Only a Super Admin can create and manage admin accounts. Order Handlers process orders;
-        Product / Offer Managers manage the catalogue and promotions.
+        Order Handlers belong to a branch and only see orders routed to it. Super Admins and
+        Product / Offer Managers stay global.
       </p>
 
       <form className="panel admin-form" onSubmit={create}>
@@ -162,6 +188,20 @@ export default function AdminUsers() {
               ))}
             </select>
           </label>
+          <label>
+            Branch{' '}
+            {form.role === 'ORDER_HANDLER' && (
+              <span className="muted"> (required)</span>
+            )}
+            <select value={form.branchId} onChange={set('branchId')}>
+              <option value="">— Global —</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <button className="btn" disabled={saving}>
           {saving ? 'Creating…' : '+ Create user'}
@@ -175,6 +215,7 @@ export default function AdminUsers() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Branch</th>
               <th>Status</th>
               <th>Created</th>
               <th aria-label="actions" />
@@ -185,6 +226,7 @@ export default function AdminUsers() {
               <UserRow
                 key={u.id}
                 user={u}
+                branches={branches}
                 currentId={me?.id}
                 onSaved={upsert}
                 onDeleted={drop}

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api, { apiError } from '../../api/client';
 import Loader from '../../components/Loader.jsx';
 import IncomingOrders from '../../components/admin/IncomingOrders.jsx';
-import { createOrderSocket } from '../../lib/socket.js';
+import { useAdminSocket } from '../../context/AdminSocketContext.jsx';
 import { money, dateTime, STATUS_META } from '../../lib/format.js';
 import { NEXT_ACTION, CAN_CANCEL, STATUS_TABS } from '../../lib/orders.js';
 
@@ -15,9 +15,12 @@ export default function AdminOrders() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [socket, setSocket] = useState(null);
   // Bumped by realtime events to refresh the table below.
   const [tick, setTick] = useState(0);
+
+  // The shared admin socket — created once in AdminSocketProvider, used here
+  // and by IncomingOrders. We only attach listeners to drive the table.
+  const { socket } = useAdminSocket();
 
   async function load() {
     setLoading(true);
@@ -36,16 +39,18 @@ export default function AdminOrders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, tick]);
 
-  // One realtime connection drives the whole Orders screen.
   useEffect(() => {
-    const s = createOrderSocket();
-    setSocket(s);
+    if (!socket) return undefined;
     const bump = () => setTick((t) => t + 1);
-    s.on('order:new', bump);
-    s.on('order:claimed', bump);
-    s.on('order:updated', bump);
-    return () => s.disconnect();
-  }, []);
+    socket.on('order:new', bump);
+    socket.on('order:claimed', bump);
+    socket.on('order:updated', bump);
+    return () => {
+      socket.off('order:new', bump);
+      socket.off('order:claimed', bump);
+      socket.off('order:updated', bump);
+    };
+  }, [socket]);
 
   // Accept / dispatch / close / cancel an order.
   async function changeStatus(order, newStatus) {
@@ -62,7 +67,7 @@ export default function AdminOrders() {
     <div>
       <h1 className="admin-h1">Orders</h1>
 
-      {/* Realtime feed of new, unclaimed orders */}
+      {/* Realtime feed of new, unclaimed orders for this branch */}
       <IncomingOrders socket={socket} />
 
       <div className="tabs">
@@ -102,6 +107,7 @@ export default function AdminOrders() {
               <tr>
                 <th>Order</th>
                 <th>Customer</th>
+                <th>Branch</th>
                 <th>Items</th>
                 <th>Total</th>
                 <th>Status</th>
@@ -122,6 +128,9 @@ export default function AdminOrders() {
                     <td>
                       {o.customerName}
                       <div className="muted">{o.phone}</div>
+                    </td>
+                    <td>
+                      <span className="tag tag-grey">{o.branch?.name || '—'}</span>
                     </td>
                     <td>{o.items.reduce((s, i) => s + i.quantity, 0)}</td>
                     <td>{money(o.total)}</td>
@@ -163,7 +172,7 @@ export default function AdminOrders() {
               })}
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     No orders to show.
                   </td>
                 </tr>

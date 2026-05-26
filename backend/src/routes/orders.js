@@ -1,7 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { requireRole } = require('../middleware/auth');
-const { emitOrders } = require('../socket');
+const { emitToBranch } = require('../socket');
 const {
   asyncHandler,
   generateOrderNumber,
@@ -14,6 +14,12 @@ const router = express.Router();
 
 // Processing orders: Order Handlers and Super Admin.
 const HANDLE = [ROLES.SUPER_ADMIN, ROLES.ORDER_HANDLER];
+
+// True when this admin may act on this order. Super Admin acts on any order;
+// an Order Handler may act only on orders routed to their own branch.
+function sameBranch(admin, order) {
+  return admin.role === ROLES.SUPER_ADMIN || admin.branchId === order.branchId;
+}
 
 // POST /api/orders — place a Cash-on-Delivery order (public/customer).
 // Body: { customerName, phone, address, areaId?, notes?, items: [{productId, quantity}] }
@@ -60,13 +66,24 @@ router.post(
     let deliveryCharge = 0;
     let areaName = '';
     let resolvedAreaId = null;
+    let branchId = null;
     if (areaId) {
       const area = await prisma.deliveryArea.findUnique({ where: { id: Number(areaId) } });
       if (area) {
         resolvedAreaId = area.id;
         deliveryCharge = area.charge;
         areaName = area.name;
+        branchId = area.branchId; // route this order to the area's branch
       }
+    }
+    // If the area has no branch yet, fall back to any active branch so the
+    // order isn't orphaned — Super Admin can re-route later if needed.
+    if (!branchId) {
+      const fallback = await prisma.branch.findFirst({
+        where: { isActive: true },
+        orderBy: { id: 'asc' },
+      });
+      branchId = fallback?.id || null;
     }
 
     const order = await prisma.order.create({
@@ -77,6 +94,7 @@ router.post(
         address: address.trim(),
         areaId: resolvedAreaId,
         areaName,
+        branchId,
         notes: notes || '',
         subtotal,
         deliveryCharge,
@@ -84,11 +102,11 @@ router.post(
         status: 'PENDING',
         items: { create: lineItems },
       },
-      include: { items: true },
+      include: { items: true, branch: true },
     });
 
-    // Live: the new order "drops" onto every order handler's screen.
-    emitOrders('order:new', order);
+    // Live: this order drops onto this branch's handlers + every Super Admin.
+    emitToBranch(branchId, 'order:new', order);
     res.status(201).json(order);
   })
 );
@@ -107,6 +125,7 @@ router.get(
 );
 
 // GET /api/orders — order list for the admin portal.
+// Handlers see only their own branch; Super Admin sees everything.
 // Query: ?status=<STATUS|ALL> &search=<text>
 router.get(
   '/',
@@ -114,6 +133,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const { status, search } = req.query;
     const where = {};
+    if (req.admin.role !== ROLES.SUPER_ADMIN) {
+      // -1 deliberately matches no rows when a handler has no branch yet.
+      where.branchId = req.admin.branchId ?? -1;
+    }
     if (status && status !== 'ALL') where.status = status;
     if (search) {
       where.OR = [
@@ -124,7 +147,7 @@ router.get(
     }
     const orders = await prisma.order.findMany({
       where,
-      include: { items: true },
+      include: { items: true, branch: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
@@ -138,16 +161,18 @@ router.get(
   asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: Number(req.params.id) },
-      include: { items: true },
+      include: { items: true, branch: true },
     });
     if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!sameBranch(req.admin, order)) {
+      return res.status(403).json({ error: 'This order belongs to another branch' });
+    }
     res.json(order);
   })
 );
 
-// PATCH /api/orders/:id/claim — "pick" an incoming order.
-// The conditional updateMany makes this atomic: only the first handler
-// to claim a still-PENDING, unclaimed order wins.
+// PATCH /api/orders/:id/claim — "pick" an incoming order. Atomic: only the
+// first handler in the matching branch to claim a still-PENDING order wins.
 router.patch(
   '/:id/claim',
   requireRole(...HANDLE),
@@ -155,6 +180,9 @@ router.patch(
     const id = Number(req.params.id);
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!sameBranch(req.admin, order)) {
+      return res.status(403).json({ error: 'This order belongs to another branch' });
+    }
 
     const result = await prisma.order.updateMany({
       where: { id, status: 'PENDING', claimedById: null },
@@ -166,16 +194,17 @@ router.patch(
     });
 
     if (result.count === 0) {
-      // Lost the race — another handler already picked it.
       const current = await prisma.order.findUnique({ where: { id } });
       return res.status(409).json({
         error: `This order was already picked by ${current?.claimedByName || 'another handler'}`,
       });
     }
 
-    const updated = await prisma.order.findUnique({ where: { id }, include: { items: true } });
-    // Live: the card disappears from every order handler's screen.
-    emitOrders('order:claimed', {
+    const updated = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true, branch: true },
+    });
+    emitToBranch(order.branchId, 'order:claimed', {
       orderId: id,
       claimedById: req.admin.id,
       claimedByName: req.admin.name,
@@ -185,9 +214,7 @@ router.patch(
   })
 );
 
-// PATCH /api/orders/:id/status — advance an order through its lifecycle.
-// Accept (PENDING->ACCEPTED), dispatch (ACCEPTED->DISPATCHED),
-// close (DISPATCHED->CLOSED) or cancel.
+// PATCH /api/orders/:id/status — accept / dispatch / close / cancel.
 router.patch(
   '/:id/status',
   requireRole(...HANDLE),
@@ -198,6 +225,9 @@ router.patch(
     }
     const order = await prisma.order.findUnique({ where: { id: Number(req.params.id) } });
     if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!sameBranch(req.admin, order)) {
+      return res.status(403).json({ error: 'This order belongs to another branch' });
+    }
 
     const allowed = STATUS_FLOW[order.status] || [];
     if (status !== order.status && !allowed.includes(status)) {
@@ -216,10 +246,9 @@ router.patch(
     const updated = await prisma.order.update({
       where: { id: order.id },
       data,
-      include: { items: true },
+      include: { items: true, branch: true },
     });
-    // Live: keep every order handler's screen in sync.
-    emitOrders('order:updated', updated);
+    emitToBranch(order.branchId, 'order:updated', updated);
     res.json(updated);
   })
 );

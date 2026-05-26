@@ -342,6 +342,56 @@
 .claimed-by { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
 .alert-info { background: #e7f2fb; color: #1f5e8f; }
 
+/* ---- Site-wide toast (live order alerts) ---- */
+.toast-stack {
+  position: fixed;
+  top: 80px;
+  right: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1000;
+  max-width: 320px;
+  pointer-events: none; /* the toasts themselves re-enable pointer events */
+}
+.toast {
+  pointer-events: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--brand);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 13px 36px 13px 14px;
+  color: var(--ink);
+  display: block;
+  text-decoration: none;
+  position: relative;
+  animation: toast-in 0.35s ease;
+}
+.toast:hover { transform: translateX(-2px); transition: transform 0.15s; }
+@keyframes toast-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.toast-title { font-weight: 700; margin-bottom: 4px; font-size: 0.95rem; }
+.toast-body  { font-size: 0.84rem; color: var(--muted); margin-bottom: 4px; }
+.toast-foot  { font-size: 0.8rem; color: var(--brand-dark); font-weight: 700; }
+.toast-branch { color: var(--muted); font-weight: 600; }
+.toast-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.3rem;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.toast-close:hover { color: var(--ink); }
+
 /* ---- Responsive ---- */
 @media (max-width: 820px) {
   .admin { flex-direction: column; }

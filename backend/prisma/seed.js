@@ -3,8 +3,24 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../src/lib/prisma');
 const { slugify, generateOrderNumber } = require('../src/utils/helpers');
 
+// Sample physical branches. Add more via the admin portal once running.
+const BRANCHES = [
+  ['Garden Branch', 'Karachi', 'M.A. Jinnah Road, Garden', '021-35000111'],
+  ['Clifton Branch', 'Karachi', 'Khayaban-e-Iqbal, Clifton', '021-35000222'],
+  ['DHA Branch', 'Karachi', 'Khayaban-e-Saadi, DHA Phase 4', '021-35000333'],
+];
+
+// Each delivery area is fulfilled by exactly one branch.
+const AREAS = [
+  ['Gulshan-e-Iqbal', 120, 'Garden Branch'],
+  ['Bahadurabad', 110, 'Garden Branch'],
+  ['North Nazimabad', 130, 'Garden Branch'],
+  ['Clifton', 150, 'Clifton Branch'],
+  ['DHA', 150, 'DHA Branch'],
+  ['Malir', 180, 'DHA Branch'],
+];
+
 // Categories mirror the iceberg.pk catalogue structure.
-// Products are sample data with PKR prices — replace via the admin portal.
 const CATALOG = [
   {
     category: 'Regular Flavour',
@@ -83,22 +99,15 @@ const CATALOG = [
   },
 ];
 
-const AREAS = [
-  ['Gulshan-e-Iqbal', 120],
-  ['DHA', 150],
-  ['Clifton', 150],
-  ['North Nazimabad', 130],
-  ['Bahadurabad', 110],
-  ['Malir', 180],
-];
-
 const OFFERS = [
   { title: 'Free delivery on orders above Rs. 2,500', sortOrder: 1 },
   { title: 'New scoop in town — try Chocolate Fudge Brownie', sortOrder: 2 },
 ];
 
 async function main() {
-  // Clear existing data so the seed is safe to re-run.
+  // Clear existing data so the seed is safe to re-run. Order matters
+  // only for `onDelete: SetNull` rows being snapshotted first; the rest
+  // is governed by Prisma's relation actions.
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.productImage.deleteMany();
@@ -107,14 +116,56 @@ async function main() {
   await prisma.offer.deleteMany();
   await prisma.deliveryArea.deleteMany();
   await prisma.adminUser.deleteMany();
+  await prisma.branch.deleteMany();
 
-  // --- Admin users (one account per role) --------------------------------
+  // --- Branches ----------------------------------------------------------
+  const branchByName = {};
+  for (const [name, city, address, phone] of BRANCHES) {
+    const branch = await prisma.branch.create({
+      data: { name, slug: slugify(name), city, address, phone },
+    });
+    branchByName[name] = branch;
+  }
+
+  // --- Admin users (one Super Admin + one Order Handler per branch) -----
   const superEmail = (process.env.ADMIN_EMAIL || 'admin@nishani.local').toLowerCase();
   const superPassword = process.env.ADMIN_PASSWORD || 'admin123';
   const adminAccounts = [
-    { email: superEmail, name: 'Store Owner', role: 'SUPER_ADMIN', password: superPassword },
-    { email: 'orders@nishani.local', name: 'Order Handler', role: 'ORDER_HANDLER', password: 'orders123' },
-    { email: 'products@nishani.local', name: 'Product Manager', role: 'PRODUCT_MANAGER', password: 'products123' },
+    {
+      email: superEmail,
+      name: 'Store Owner',
+      role: 'SUPER_ADMIN',
+      password: superPassword,
+      branchId: null,
+    },
+    {
+      email: 'orders@nishani.local',
+      name: 'Garden Handler',
+      role: 'ORDER_HANDLER',
+      password: 'orders123',
+      branchId: branchByName['Garden Branch'].id,
+    },
+    {
+      email: 'orders.clifton@nishani.local',
+      name: 'Clifton Handler',
+      role: 'ORDER_HANDLER',
+      password: 'orders123',
+      branchId: branchByName['Clifton Branch'].id,
+    },
+    {
+      email: 'orders.dha@nishani.local',
+      name: 'DHA Handler',
+      role: 'ORDER_HANDLER',
+      password: 'orders123',
+      branchId: branchByName['DHA Branch'].id,
+    },
+    {
+      email: 'products@nishani.local',
+      name: 'Product Manager',
+      role: 'PRODUCT_MANAGER',
+      password: 'products123',
+      branchId: null,
+    },
   ];
   for (const acc of adminAccounts) {
     await prisma.adminUser.create({
@@ -122,12 +173,13 @@ async function main() {
         email: acc.email,
         name: acc.name,
         role: acc.role,
+        branchId: acc.branchId,
         passwordHash: bcrypt.hashSync(acc.password, 10),
       },
     });
   }
 
-  // --- Catalogue ---------------------------------------------------------
+  // --- Catalogue --------------------------------------------------------
   const productByName = {};
   let sortOrder = 0;
   for (const group of CATALOG) {
@@ -150,25 +202,27 @@ async function main() {
     }
   }
 
-  // --- Delivery areas ----------------------------------------------------
-  for (const [name, charge] of AREAS) {
-    await prisma.deliveryArea.create({ data: { name, charge } });
+  // --- Delivery areas (each linked to a branch) --------------------------
+  for (const [name, charge, branchName] of AREAS) {
+    await prisma.deliveryArea.create({
+      data: { name, charge, branchId: branchByName[branchName].id },
+    });
   }
   const areas = await prisma.deliveryArea.findMany();
 
-  // --- Offers ------------------------------------------------------------
+  // --- Offers -----------------------------------------------------------
   for (const offer of OFFERS) {
     await prisma.offer.create({ data: offer });
   }
 
-  // --- Sample orders -----------------------------------------------------
+  // --- Sample orders (routed to whichever branch owns the chosen area) --
   const SAMPLE_ORDERS = [
-    { name: 'Ayesha Khan', phone: '03001234567', status: 'CLOSED', lines: [['Vanilla', 2], ['Pista Kulfi', 4]] },
-    { name: 'Bilal Ahmed', phone: '03111234567', status: 'CLOSED', lines: [['Chocolate Fudge Brownie', 1], ['Mango', 1]] },
-    { name: 'Sara Malik', phone: '03212345678', status: 'DISPATCHED', lines: [['Dark Velvet', 1]] },
+    { name: 'Ayesha Khan', phone: '03001234567', status: 'CLOSED',     lines: [['Vanilla', 2], ['Pista Kulfi', 4]] },
+    { name: 'Bilal Ahmed', phone: '03111234567', status: 'CLOSED',     lines: [['Chocolate Fudge Brownie', 1], ['Mango', 1]] },
+    { name: 'Sara Malik',  phone: '03212345678', status: 'DISPATCHED', lines: [['Dark Velvet', 1]] },
     { name: 'Hamza Sheikh', phone: '03331234567', status: 'ACCEPTED', lines: [['Anjeer', 1], ['Cadbury Crunch', 1]] },
-    { name: 'Fatima Noor', phone: '03451234567', status: 'PENDING', lines: [['Strawberry Cheesecake', 2]] },
-    { name: 'Usman Tariq', phone: '03091234567', status: 'PENDING', lines: [['Three Milk Cake', 1], ['Coffee', 1]] },
+    { name: 'Fatima Noor', phone: '03451234567', status: 'PENDING',    lines: [['Strawberry Cheesecake', 2]] },
+    { name: 'Usman Tariq', phone: '03091234567', status: 'PENDING',    lines: [['Three Milk Cake', 1], ['Coffee', 1]] },
   ];
 
   for (const sample of SAMPLE_ORDERS) {
@@ -187,6 +241,7 @@ async function main() {
         address: 'Sample address, Karachi',
         areaId: area.id,
         areaName: area.name,
+        branchId: area.branchId, // route to the area's branch
         subtotal,
         deliveryCharge: area.charge,
         total: subtotal + area.charge,
@@ -194,13 +249,13 @@ async function main() {
         items: { create: items },
       },
     });
-    // Move to the target status so updatedAt reflects realised income.
     if (sample.status !== 'PENDING') {
       await prisma.order.update({ where: { id: order.id }, data: { status: sample.status } });
     }
   }
 
   const counts = {
+    branches: await prisma.branch.count(),
     categories: await prisma.category.count(),
     products: await prisma.product.count(),
     areas: await prisma.deliveryArea.count(),
@@ -210,7 +265,10 @@ async function main() {
   console.log('Seed complete:', counts);
   console.log('Admin logins:');
   for (const acc of adminAccounts) {
-    console.log(`  ${acc.role.padEnd(16)} ${acc.email} / ${acc.password}`);
+    const branchLabel = acc.branchId
+      ? `[${Object.keys(branchByName).find((b) => branchByName[b].id === acc.branchId)}]`
+      : '[global]';
+    console.log(`  ${acc.role.padEnd(16)} ${acc.email.padEnd(34)} ${acc.password.padEnd(12)} ${branchLabel}`);
   }
 }
 

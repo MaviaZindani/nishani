@@ -17,6 +17,8 @@ const publicUser = (u) => ({
   name: u.name,
   role: u.role,
   isActive: u.isActive,
+  branchId: u.branchId,
+  branch: u.branch || null,
   createdAt: u.createdAt,
 });
 
@@ -24,16 +26,19 @@ const publicUser = (u) => ({
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const users = await prisma.adminUser.findMany({ orderBy: { createdAt: 'asc' } });
+    const users = await prisma.adminUser.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { branch: true },
+    });
     res.json(users.map(publicUser));
   })
 );
 
-// POST /api/users — create an Order Handler or Product/Offer Manager (or Super Admin).
+// POST /api/users — create an Order Handler / Product Manager / Super Admin.
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { email, name, password, role } = req.body;
+    const { email, name, password, role, branchId } = req.body;
     if (!email || !name || !password || !role) {
       return res.status(400).json({ error: 'Email, name, password and role are required' });
     }
@@ -43,19 +48,25 @@ router.post(
     if (String(password).length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
+    // Order Handlers must belong to a branch; other roles may stay global.
+    if (role === ROLES.ORDER_HANDLER && !branchId) {
+      return res.status(400).json({ error: 'Order Handlers must be assigned to a branch' });
+    }
     const user = await prisma.adminUser.create({
       data: {
         email: String(email).toLowerCase().trim(),
         name: name.trim(),
         role,
+        branchId: branchId ? Number(branchId) : null,
         passwordHash: bcrypt.hashSync(password, 10),
       },
+      include: { branch: true },
     });
     res.status(201).json(publicUser(user));
   })
 );
 
-// PUT /api/users/:id — update name, role, active status or password.
+// PUT /api/users/:id — update name, role, branch, active status or password.
 router.put(
   '/:id',
   asyncHandler(async (req, res) => {
@@ -63,7 +74,7 @@ router.put(
     const target = await prisma.adminUser.findUnique({ where: { id } });
     if (!target) return res.status(404).json({ error: 'User not found' });
 
-    const { name, role, isActive, password } = req.body;
+    const { name, role, isActive, password, branchId } = req.body;
     if (role && !ALL_ROLES.includes(role)) {
       return res.status(400).json({ error: 'Unknown role' });
     }
@@ -83,17 +94,30 @@ router.put(
       }
     }
 
+    // An Order Handler (new or existing) must have a branch.
+    const effectiveRole = role !== undefined ? role : target.role;
+    const effectiveBranch =
+      branchId !== undefined ? (branchId ? Number(branchId) : null) : target.branchId;
+    if (effectiveRole === ROLES.ORDER_HANDLER && !effectiveBranch) {
+      return res.status(400).json({ error: 'Order Handlers must be assigned to a branch' });
+    }
+
     const data = {};
     if (name !== undefined) data.name = name.trim();
     if (role !== undefined) data.role = role;
     if (isActive !== undefined) data.isActive = !!isActive;
+    if (branchId !== undefined) data.branchId = branchId ? Number(branchId) : null;
     if (password) {
       if (String(password).length < 6) {
         return res.status(400).json({ error: 'Password must be at least 6 characters' });
       }
       data.passwordHash = bcrypt.hashSync(password, 10);
     }
-    const user = await prisma.adminUser.update({ where: { id }, data });
+    const user = await prisma.adminUser.update({
+      where: { id },
+      data,
+      include: { branch: true },
+    });
     res.json(publicUser(user));
   })
 );

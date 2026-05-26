@@ -3,14 +3,20 @@ import api, { apiError } from '../../api/client';
 import Loader from '../../components/Loader.jsx';
 
 // One editable delivery-area row.
-function AreaRow({ area, onSaved, onDeleted }) {
+function AreaRow({ area, branches, onSaved, onDeleted }) {
   const [name, setName] = useState(area.name);
   const [charge, setCharge] = useState(area.charge);
+  const [branchId, setBranchId] = useState(area.branchId || '');
   const [isActive, setIsActive] = useState(area.isActive);
 
   async function save() {
     try {
-      const { data } = await api.put(`/areas/${area.id}`, { name, charge, isActive });
+      const { data } = await api.put(`/areas/${area.id}`, {
+        name,
+        charge,
+        isActive,
+        branchId: branchId || null,
+      });
       onSaved(data);
     } catch (e) {
       alert(apiError(e));
@@ -33,6 +39,16 @@ function AreaRow({ area, onSaved, onDeleted }) {
       </td>
       <td className="cell-narrow">
         <input type="number" value={charge} onChange={(e) => setCharge(Number(e.target.value))} />
+      </td>
+      <td>
+        <select value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+          <option value="">— Unassigned —</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
       </td>
       <td>
         <label className="check">
@@ -58,12 +74,17 @@ function AreaRow({ area, onSaved, onDeleted }) {
 
 export default function AdminAreas() {
   const [areas, setAreas] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', charge: '' });
+  const [form, setForm] = useState({ name: '', charge: '', branchId: '' });
 
   async function load() {
-    const { data } = await api.get('/areas', { params: { all: 1 } });
-    setAreas(data);
+    const [a, b] = await Promise.all([
+      api.get('/areas', { params: { all: 1 } }),
+      api.get('/branches'),
+    ]);
+    setAreas(a.data);
+    setBranches(b.data);
     setLoading(false);
   }
   useEffect(() => {
@@ -77,9 +98,10 @@ export default function AdminAreas() {
       const { data } = await api.post('/areas', {
         name: form.name,
         charge: Number(form.charge) || 0,
+        branchId: form.branchId || null,
       });
       setAreas((prev) => [...prev, data]);
-      setForm({ name: '', charge: '' });
+      setForm({ name: '', charge: '', branchId: '' });
     } catch (err) {
       alert(apiError(err));
     }
@@ -94,7 +116,7 @@ export default function AdminAreas() {
     <div>
       <h1 className="admin-h1">Delivery Areas</h1>
       <p className="muted">
-        The charge for the area a customer selects is added to their order total at checkout.
+        Each area belongs to one branch — that branch fulfils every order placed in this area.
       </p>
 
       <div className="panel">
@@ -110,6 +132,17 @@ export default function AdminAreas() {
             value={form.charge}
             onChange={(e) => setForm({ ...form, charge: e.target.value })}
           />
+          <select
+            value={form.branchId}
+            onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+          >
+            <option value="">— Choose branch —</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
           <button className="btn">+ Add area</button>
         </form>
         <div className="table-wrap">
@@ -118,17 +151,24 @@ export default function AdminAreas() {
               <tr>
                 <th>Area</th>
                 <th className="cell-narrow">Charge (Rs.)</th>
+                <th>Branch</th>
                 <th>Status</th>
                 <th aria-label="actions" />
               </tr>
             </thead>
             <tbody>
               {areas.map((a) => (
-                <AreaRow key={a.id} area={a} onSaved={upsert} onDeleted={drop} />
+                <AreaRow
+                  key={a.id}
+                  area={a}
+                  branches={branches}
+                  onSaved={upsert}
+                  onDeleted={drop}
+                />
               ))}
               {areas.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="empty">
+                  <td colSpan={5} className="empty">
                     No delivery areas yet.
                   </td>
                 </tr>

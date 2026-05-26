@@ -9,6 +9,7 @@ const NAV = [
   { to: '/admin/products', label: 'Products', icon: '🍦', area: 'products' },
   { to: '/admin/categories', label: 'Categories', icon: '🗂️', area: 'categories' },
   { to: '/admin/areas', label: 'Delivery Areas', icon: '🛵', area: 'areas' },
+  { to: '/admin/branches', label: 'Branches', icon: '🏬', area: 'branches' },
   { to: '/admin/offers', label: 'Offers', icon: '🎬', area: 'offers' },
   { to: '/admin/reports', label: 'Reports', icon: '📈', area: 'reports' },
   { to: '/admin/users', label: 'Admin Users', icon: '👥', area: 'users' },

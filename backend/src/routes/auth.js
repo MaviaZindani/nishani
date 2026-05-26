@@ -24,8 +24,15 @@ router.post(
     if (!user.isActive) {
       return res.status(403).json({ error: 'This account has been disabled' });
     }
-    // Role travels in the token so middleware can authorise without a DB hit.
-    const payload = { id: user.id, email: user.email, name: user.name, role: user.role };
+    // Role and branchId travel in the token so middleware can authorise
+    // (and the socket server can pick the right branch room) without a DB hit.
+    const payload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      branchId: user.branchId,
+    };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: payload });
   })
@@ -39,6 +46,7 @@ router.get('/me', requireAuth, (req, res) => {
       email: req.admin.email,
       name: req.admin.name,
       role: req.admin.role,
+      branchId: req.admin.branchId,
     },
   });
 });

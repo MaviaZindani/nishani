@@ -84,23 +84,68 @@ Enforcement is in **two layers, and both must agree**:
 When changing who can do what, update the route guard **and** the `ACCESS` map.
 `requireRole` returns `403`; the frontend renders `Forbidden`.
 
-## Realtime order feed (Socket.IO)
+## Multi-branch architecture & realtime
 
-A Socket.IO server (`backend/src/socket.js`) shares the HTTP port with Express
-(`index.js` wraps the app in an `http.Server`). Sockets authenticate with the
-same admin JWT, sent in the handshake `auth`; Order Handlers and Super Admins
-join the `order-handlers` room.
+The platform is **multi-branch**. A `Branch` row represents a physical
+location. `DeliveryArea.branchId` decides which branch fulfils an order
+placed in that area — when a customer checks out, the backend reads the
+chosen area's `branchId` and writes it onto the new `Order`. Schema-wise:
+`AdminUser.branchId`, `Order.branchId`, `DeliveryArea.branchId` are all
+nullable `Int?` with `onDelete: SetNull`, so deleting a branch never
+breaks history.
 
-Order routes broadcast to that room via `emitOrders(event, payload)`:
-- `order:new` — a customer placed an order
+### Roles + branches
+
+| Role | branchId | Sees |
+|---|---|---|
+| `SUPER_ADMIN` | unused (null) | every branch's orders & events |
+| `ORDER_HANDLER` | **required** | only the orders routed to their own branch |
+| `PRODUCT_MANAGER` | unused | no order events (catalogue is global) |
+
+The JWT carries `role` + `branchId`, so route guards and the socket server
+authorise without a DB hit. Order routes (`routes/orders.js`) filter the
+list query by branch for handlers and enforce `sameBranch(admin, order)`
+on `GET /:id`, `PATCH /:id/claim`, and `PATCH /:id/status`.
+
+### Socket.IO rooms (`backend/src/socket.js`)
+
+Sockets authenticate with the admin JWT (sent in the handshake `auth`).
+On connection the server joins exactly one of two kinds of rooms:
+
+- `super-admins` — every Super Admin
+- `branch_<id>` — Order Handlers belonging to that branch
+
+`emitToBranch(branchId, event, payload)` sends to **both** the branch's
+room *and* `super-admins`, so handlers see only their branch's events
+while Super Admins see everything.
+
+Events:
+- `order:new` — a customer placed an order in this branch
 - `order:claimed` — a handler picked an order (`{orderId, claimedById, claimedByName}`)
 - `order:updated` — an order's status changed
 
-The frontend (`lib/socket.js` → `IncomingOrders.jsx`, mounted on the Orders page)
-shows unclaimed orders as live cards. Picking calls `PATCH /orders/:id/claim`,
-which is **atomic** — an `updateMany` guarded by `status:'PENDING', claimedById:null`
-means only the first handler wins; the rest get `409`. In dev, Vite proxies
-`/socket.io` (`ws:true`) to the backend.
+Picking calls `PATCH /orders/:id/claim`, atomic via `updateMany` guarded
+by `status:'PENDING', claimedById:null` — only the first handler in the
+matching branch wins; the rest get `409`.
+
+### Frontend: one shared socket, site-wide alerts
+
+`AdminSocketProvider` (`context/AdminSocketContext.jsx`) wraps the admin
+portal. It opens **one** Socket.IO connection for the whole session and:
+
+- Listens for `order:new` site-wide → plays a WebAudio "ping" and pops a
+  toast in the top-right that links to `/admin/orders`. Works on every
+  admin page (Dashboard, Reports, Branches, …) — not just Orders.
+- Exposes the socket via `useAdminSocket()` so `Orders.jsx` and
+  `IncomingOrders.jsx` consume the **same** connection instead of
+  opening their own.
+
+### Local-only dev server
+
+`frontend/vite.config.local.mjs` is a one-off Vite config that proxies
+to `localhost:4000` (port `5174`). Use it when the main `vite.config.js`
+points at staging/Render but you need to test against your local backend:
+`npx vite --config vite.config.local.mjs`.
 
 ## Conventions that span multiple files
 
