@@ -53,6 +53,20 @@ const STATUS_FLOW = {
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
+// CORS allow-list parsed from CLIENT_URL. Accepts a single origin or a
+// comma-separated list, so the same backend can serve the production
+// Vercel domain and any branch-preview Vercel domains at once.
+// Returns `true` (allow all) when CLIENT_URL is unset — fine for a
+// JWT-authed API since the token, not the origin, is the real gate.
+function corsOrigin() {
+  const raw = process.env.CLIENT_URL;
+  if (!raw) return true;
+  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (list.length === 0) return true;
+  if (list.length === 1) return list[0];
+  return list;
+}
+
 module.exports = {
   slugify,
   makeUniqueSlug,
@@ -61,4 +75,5 @@ module.exports = {
   ORDER_STATUSES,
   STATUS_FLOW,
   asyncHandler,
+  corsOrigin,
 };

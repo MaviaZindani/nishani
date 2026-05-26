@@ -1,6 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { ROLES } = require('./utils/helpers');
+const { ROLES, corsOrigin } = require('./utils/helpers');
 
 let io = null;
 
@@ -13,7 +13,7 @@ const branchRoom = (id) => `branch_${id}`;
 
 function initSocket(httpServer) {
   io = new Server(httpServer, {
-    cors: { origin: process.env.CLIENT_URL || true },
+    cors: { origin: corsOrigin() },
   });
 
   // JWT is read from the handshake on every connection.
