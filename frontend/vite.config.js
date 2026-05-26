@@ -8,10 +8,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'https://nishani.onrender.com',
-      '/uploads': 'https://nishani.onrender.com',
+      '/api': 'http://localhost:4000',
+      '/uploads': 'http://localhost:4000',
       // Socket.IO — ws:true proxies the WebSocket upgrade too.
-      '/socket.io': { target: 'https://nishani.onrender.com', ws: true },
+      '/socket.io': { target: 'http://localhost:4000', ws: true },
     },
   },
 });
