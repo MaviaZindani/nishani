@@ -1,44 +1,40 @@
-import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
-import api, { apiError } from '../../api/client';
+import { apiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { MyBranchProvider, useMyBranch } from '../../context/MyBranchContext.jsx';
 import { can, ROLE_LABELS } from '../../lib/roles.js';
+import AdminOnboarding from './AdminOnboarding.jsx';
+import { useState } from 'react';
 
 // Every nav item declares the access `area` it needs (see lib/roles.js).
+// `tour` is the value of the `data-tour` attribute so react-joyride can
+// spotlight individual links during the first-time tour.
 const NAV = [
-  { to: '/admin', label: 'Dashboard', icon: '📊', end: true, area: 'dashboard' },
-  { to: '/admin/orders', label: 'Orders', icon: '📦', area: 'orders' },
-  { to: '/admin/products', label: 'Products', icon: '🍦', area: 'products' },
-  { to: '/admin/categories', label: 'Categories', icon: '🗂️', area: 'categories' },
-  { to: '/admin/areas', label: 'Delivery Areas', icon: '🛵', area: 'areas' },
-  { to: '/admin/branches', label: 'Branches', icon: '🏬', area: 'branches' },
-  { to: '/admin/offers', label: 'Offers', icon: '🎬', area: 'offers' },
-  { to: '/admin/reports', label: 'Reports', icon: '📈', area: 'reports' },
-  { to: '/admin/users', label: 'Admin Users', icon: '👥', area: 'users' },
+  { to: '/admin',            label: 'Dashboard',      icon: '📊', end: true, area: 'dashboard',  tour: 'nav-dashboard' },
+  { to: '/admin/orders',     label: 'Orders',         icon: '📦',           area: 'orders',     tour: 'nav-orders' },
+  { to: '/admin/products',   label: 'Products',       icon: '🍦',           area: 'products',   tour: 'nav-products' },
+  { to: '/admin/categories', label: 'Categories',     icon: '🗂️',           area: 'categories', tour: 'nav-categories' },
+  { to: '/admin/areas',      label: 'Delivery Areas', icon: '🛵',           area: 'areas',      tour: 'nav-areas' },
+  { to: '/admin/branches',   label: 'Branches',       icon: '🏬',           area: 'branches',   tour: 'nav-branches' },
+  { to: '/admin/offers',     label: 'Offers',         icon: '🎬',           area: 'offers',     tour: 'nav-offers' },
+  { to: '/admin/reports',    label: 'Reports',        icon: '📈',           area: 'reports',    tour: 'nav-reports' },
+  { to: '/admin/users',      label: 'Admin Users',    icon: '👥',           area: 'users',      tour: 'nav-users' },
 ];
 
 // Order Handlers get a one-click toggle in the topbar so they can pause
 // (or resume) new orders for their own branch without leaving the screen.
-function BranchToggle({ branchId }) {
-  const [branch, setBranch] = useState(null);
+// State is held in MyBranchContext so the Onboarding prompt and this
+// toggle never disagree about whether the branch is open.
+function BranchToggle() {
+  const { branch, setOpen } = useMyBranch();
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!branchId) return;
-    api
-      .get('/branches', { params: { all: 1 } })
-      .then((r) => setBranch(r.data.find((b) => b.id === branchId) || null))
-      .catch(() => {});
-  }, [branchId]);
+  if (!branch) return null;
 
   async function toggle() {
-    if (!branch) return;
     setSaving(true);
     try {
-      const { data } = await api.patch(`/branches/${branchId}/open`, {
-        isOpen: !branch.isOpen,
-      });
-      setBranch((b) => ({ ...b, ...data }));
+      await setOpen(!branch.isOpen);
     } catch (e) {
       alert(apiError(e));
     } finally {
@@ -46,10 +42,10 @@ function BranchToggle({ branchId }) {
     }
   }
 
-  if (!branch) return null;
   return (
     <button
       type="button"
+      data-tour="branch-toggle"
       className={`branch-toggle ${branch.isOpen ? 'is-open' : 'is-closed'}`}
       onClick={toggle}
       disabled={saving}
@@ -63,6 +59,14 @@ function BranchToggle({ branchId }) {
 
 // Shell for the admin portal: role-filtered sidebar + top bar + content.
 export default function AdminLayout() {
+  return (
+    <MyBranchProvider>
+      <AdminLayoutInner />
+    </MyBranchProvider>
+  );
+}
+
+function AdminLayoutInner() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -76,13 +80,13 @@ export default function AdminLayout() {
 
   return (
     <div className="admin">
-      <aside className="admin-sidebar">
+      <aside className="admin-sidebar" data-tour="sidebar">
         <Link to="/admin" className="admin-brand">
           <span className="logo-mark">🍦</span> Nishani
         </Link>
         <nav className="admin-nav">
           {items.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end}>
+            <NavLink key={item.to} to={item.to} end={item.end} data-tour={item.tour}>
               <span className="admin-nav-icon">{item.icon}</span>
               {item.label}
             </NavLink>
@@ -97,7 +101,7 @@ export default function AdminLayout() {
         <header className="admin-topbar">
           <div className="admin-topbar-title">Admin Portal</div>
           <div className="admin-topbar-user">
-            {isHandler && <BranchToggle branchId={user.branchId} />}
+            {isHandler && <BranchToggle />}
             <span className="role-badge">{ROLE_LABELS[user?.role] || 'Admin'}</span>
             <span>{user?.name || user?.email}</span>
             <button className="btn btn-sm btn-outline" onClick={signOut}>
@@ -109,6 +113,9 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* First-time tour and "open my branch?" prompt. */}
+      <AdminOnboarding />
     </div>
   );
 }

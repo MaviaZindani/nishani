@@ -2,6 +2,25 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useCart } from '../../context/CartContext.jsx';
+import { GeoLocationProvider } from '../../context/GeoLocationContext.jsx';
+import {
+  StorefrontStatusProvider,
+  useStorefrontStatus,
+} from '../../context/StorefrontStatusContext.jsx';
+import LocationBanner from './LocationBanner.jsx';
+
+// Site-wide "we're closed" notice. Renders at the top of every storefront
+// page when no branch is currently operational (no online handlers + open).
+function ClosedBanner() {
+  const { acceptingOrders, loading } = useStorefrontStatus();
+  if (loading || acceptingOrders) return null;
+  return (
+    <div className="closed-banner" role="status">
+      🔒 We're currently closed — you can still browse, but new orders can't be placed
+      right now. Please check back shortly.
+    </div>
+  );
+}
 
 // Shared chrome for every storefront page: promo bar, header, nav, footer.
 export default function StoreLayout() {
@@ -20,7 +39,11 @@ export default function StoreLayout() {
   }
 
   return (
+    <StorefrontStatusProvider>
+    <GeoLocationProvider>
     <div className="store">
+      <LocationBanner />
+      <ClosedBanner />
       <div className="promo-bar">
         🚚 Delivery times may be extended due to a high volume of orders — thank you for your patience!
       </div>
@@ -103,5 +126,7 @@ export default function StoreLayout() {
         </div>
       </footer>
     </div>
+    </GeoLocationProvider>
+    </StorefrontStatusProvider>
   );
 }

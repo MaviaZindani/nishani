@@ -65,12 +65,12 @@ export default function Dashboard() {
       <div className="stat-grid">
         {income && (
           <>
-            <div className="stat-card stat-accent">
+            <div className="stat-card stat-accent" data-tour="dashboard-income">
               <span className="stat-label">Income this month</span>
               <span className="stat-value">{money(income.month)}</span>
               <span className="stat-foot">Today: {money(income.today)}</span>
             </div>
-            <div className="stat-card">
+            <div className="stat-card" data-tour="dashboard-lifetime">
               <span className="stat-label">Lifetime income</span>
               <span className="stat-value">{money(income.lifetime)}</span>
               <span className="stat-foot">From delivered orders</span>
@@ -79,12 +79,12 @@ export default function Dashboard() {
         )}
         {showOrders && (
           <>
-            <div className="stat-card">
+            <div className="stat-card" data-tour="dashboard-pending">
               <span className="stat-label">Pending orders</span>
               <span className="stat-value">{orders.pending}</span>
               <span className="stat-foot">Awaiting acceptance</span>
             </div>
-            <div className="stat-card">
+            <div className="stat-card" data-tour="dashboard-total">
               <span className="stat-label">Total orders</span>
               <span className="stat-value">{orders.total}</span>
               <span className="stat-foot">{orders.closed} delivered</span>
@@ -92,7 +92,7 @@ export default function Dashboard() {
           </>
         )}
         {showCatalog && (
-          <div className="stat-card">
+          <div className="stat-card" data-tour="dashboard-catalog">
             <span className="stat-label">Catalogue</span>
             <span className="stat-value">{catalog.products}</span>
             <span className="stat-foot">products in {catalog.categories} categories</span>

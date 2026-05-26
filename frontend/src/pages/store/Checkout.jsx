@@ -2,11 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { apiError } from '../../api/client';
 import { useCart } from '../../context/CartContext.jsx';
+import { useGeoLocation } from '../../context/GeoLocationContext.jsx';
 import { money } from '../../lib/format.js';
 
 export default function Checkout() {
   const { items, subtotal, clear } = useCart();
   const navigate = useNavigate();
+
+  // Customer location is captured site-wide (see GeoLocationContext / the
+  // first-visit banner). At checkout we just consume it; no prompts here
+  // unless the user explicitly clicks "Use my live location".
+  const { coords, status, request } = useGeoLocation();
 
   const [areas, setAreas] = useState([]);
   const [form, setForm] = useState({
@@ -16,13 +22,7 @@ export default function Checkout() {
     areaId: '',
     notes: '',
   });
-
-  // Live location + delivery-time estimate.
-  const [coords, setCoords] = useState(null);
   const [eta, setEta] = useState(null);
-  const [locating, setLocating] = useState(false);
-  const [locError, setLocError] = useState('');
-
   const [error, setError] = useState('');
   const [placing, setPlacing] = useState(false);
 
@@ -30,7 +30,7 @@ export default function Checkout() {
     api.get('/areas').then((r) => setAreas(r.data)).catch(() => {});
   }, []);
 
-  // Whenever the area changes (or the customer's coords arrive),
+  // Whenever the area changes (or coords arrive from the global context),
   // refetch the live ETA so the number on screen stays honest.
   useEffect(() => {
     if (!form.areaId) {
@@ -42,35 +42,11 @@ export default function Checkout() {
       params.lat = coords.lat;
       params.lng = coords.lng;
     }
-    api.get('/eta', { params })
+    api
+      .get('/eta', { params })
       .then((r) => setEta(r.data))
       .catch(() => setEta(null));
   }, [form.areaId, coords]);
-
-  // Ask the browser for the customer's current coordinates.
-  function requestLocation() {
-    setLocError('');
-    if (!('geolocation' in navigator)) {
-      setLocError('Your browser does not support live location.');
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
-      },
-      (err) => {
-        setLocError(
-          err.code === 1
-            ? 'Location permission was blocked. Open site settings to allow it.'
-            : 'Could not get your location — try again.'
-        );
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }
 
   if (items.length === 0) {
     return (
@@ -105,6 +81,31 @@ export default function Checkout() {
       setError(apiError(err));
       setPlacing(false);
     }
+  }
+
+  // Footer of the ETA card — shows the current location state, but only
+  // ever prompts on a user click. If the user has already granted, we show
+  // a quiet confirmation; if denied/unsupported we don't pester them.
+  function LocationFooter() {
+    if (coords) return <span className="eta-using-loc">📍 Using your live location</span>;
+    if (status === 'requesting') return <span className="muted">Locating…</span>;
+    if (status === 'denied') {
+      return (
+        <span className="muted">
+          Location was blocked in your browser — using the default time. You can re-enable it
+          in site settings.
+        </span>
+      );
+    }
+    if (status === 'unsupported') {
+      return <span className="muted">Your device doesn't support live location.</span>;
+    }
+    // idle | dismissed → offer the inline opt-in
+    return (
+      <button type="button" className="btn btn-sm btn-outline" onClick={request}>
+        📍 Use my live location for an exact time
+      </button>
+    );
   }
 
   return (
@@ -144,9 +145,7 @@ export default function Checkout() {
               <div className="eta-main">
                 <span className="eta-icon" aria-hidden>⏱</span>
                 <div>
-                  <strong>
-                    Estimated delivery: ~{eta?.minutes ?? '—'} min
-                  </strong>
+                  <strong>Estimated delivery: ~{eta?.minutes ?? '—'} min</strong>
                   {eta?.precision === 'live' && eta.distanceKm != null && (
                     <div className="muted">
                       {eta.distanceKm} km from {eta.branch?.name || 'your branch'}
@@ -161,8 +160,8 @@ export default function Checkout() {
               </div>
               {eta?.redirected && eta?.branch && (
                 <div className="eta-notice eta-redirect">
-                  {eta.homeBranch?.name || 'Your usual branch'} is currently closed —
-                  your order will be delivered from <strong>{eta.branch.name}</strong>.
+                  {eta.homeBranch?.name || 'Your usual branch'} is currently closed — your
+                  order will be delivered from <strong>{eta.branch.name}</strong>.
                 </div>
               )}
               {eta && eta.available === false && (
@@ -170,19 +169,7 @@ export default function Checkout() {
                   No branches are open right now. Please try again in a few minutes.
                 </div>
               )}
-              {!coords ? (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline"
-                  onClick={requestLocation}
-                  disabled={locating}
-                >
-                  {locating ? 'Locating…' : '📍 Use my live location'}
-                </button>
-              ) : (
-                <span className="eta-using-loc">📍 Using your live location</span>
-              )}
-              {locError && <div className="alert alert-error eta-loc-error">{locError}</div>}
+              <LocationFooter />
             </div>
           )}
 

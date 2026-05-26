@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../../context/CartContext.jsx';
+import { useStorefrontStatus } from '../../context/StorefrontStatusContext.jsx';
 import ProductImage from '../../components/ProductImage.jsx';
 import { money } from '../../lib/format.js';
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, subtotal, clear } = useCart();
+  const { acceptingOrders, loading: statusLoading } = useStorefrontStatus();
 
   if (items.length === 0) {
     return (
@@ -66,9 +68,21 @@ export default function Cart() {
             <span>Total</span>
             <span>{money(subtotal)}</span>
           </div>
-          <Link to="/checkout" className="btn btn-block">
-            Proceed to checkout
-          </Link>
+          {acceptingOrders || statusLoading ? (
+            <Link to="/checkout" className="btn btn-block">
+              Proceed to checkout
+            </Link>
+          ) : (
+            <>
+              <button type="button" className="btn btn-block" disabled>
+                🔒 Currently closed
+              </button>
+              <p className="muted cart-closed-note">
+                All branches are closed right now. Your cart is saved — please try again
+                shortly.
+              </p>
+            </>
+          )}
         </aside>
       </div>
     </div>

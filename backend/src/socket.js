@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const prisma = require('./lib/prisma');
 const { ROLES, corsOrigin } = require('./utils/helpers');
 
 let io = null;
@@ -36,6 +37,23 @@ function initSocket(httpServer) {
       socket.join(branchRoom(branchId));
     }
     // PMs and unassigned handlers join no room — no events delivered.
+
+    // When the LAST Order Handler of a branch goes offline, flip the
+    // branch's `isOpen` flag to false. The next handler to sign in will
+    // see the "Open your branch?" prompt and must explicitly accept.
+    socket.on('disconnect', async () => {
+      if (role !== ROLES.ORDER_HANDLER || !branchId) return;
+      // socket.io has already removed this socket from the room by now.
+      if (countOnlineHandlers(branchId) > 0) return;
+      try {
+        await prisma.branch.update({
+          where: { id: branchId },
+          data: { isOpen: false },
+        });
+      } catch {
+        /* ignore — branch may have been deleted */
+      }
+    });
   });
 
   return io;

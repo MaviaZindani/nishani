@@ -231,6 +231,39 @@
 }
 .branch-toggle.is-closed { background: #fde8e8; border-color: #f3c0c0; color: #b91c1c; }
 .branch-toggle.is-closed .branch-toggle-dot { background: var(--danger); }
+
+/* ---- Modal: portal overview + open-branch prompt ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 12, 25, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+  animation: modal-fade 0.18s ease;
+}
+.modal {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px 26px;
+  max-width: 460px;
+  width: 100%;
+  animation: modal-pop 0.22s ease;
+}
+@keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-pop  { from { transform: translateY(12px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.modal-title { font-size: 1.35rem; margin-bottom: 4px; }
+.modal-sub   { margin-bottom: 14px; font-size: 0.88rem; }
+.modal-lead  { margin-bottom: 14px; color: var(--ink); }
+.modal-list  { padding-left: 18px; margin: 0 0 18px; }
+.modal-list li { margin-bottom: 9px; font-size: 0.92rem; color: var(--ink); line-height: 1.5; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+
+/* The spotlight tour is now rendered by react-joyride — see AdminTour.jsx.
+   Joyride applies its own inline styles via the styles prop. */
 .cell-product { display: flex; align-items: center; gap: 10px; }
 .cell-thumb {
   width: 42px;
