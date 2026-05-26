@@ -351,9 +351,12 @@
   flex-direction: column;
   gap: 10px;
   z-index: 1000;
-  max-width: 320px;
+  width: 320px;
+  max-width: calc(100vw - 44px);
   pointer-events: none; /* the toasts themselves re-enable pointer events */
 }
+/* If the stack ever renders empty, remove it from layout entirely. */
+.toast-stack:empty { display: none; }
 .toast {
   pointer-events: auto;
   background: #fff;

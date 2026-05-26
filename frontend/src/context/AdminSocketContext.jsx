@@ -69,6 +69,9 @@ export function AdminSocketProvider({ children }) {
   return (
     <SocketContext.Provider value={{ socket }}>
       {children}
+      {/* Mount the toast container only when there are toasts to show —
+         no empty fixed-position element ever exists in the DOM. */}
+      {toasts.length > 0 && (
       <div className="toast-stack" aria-live="polite">
         {toasts.map(({ id, order }) => (
           <Link
@@ -101,6 +104,7 @@ export function AdminSocketProvider({ children }) {
           </Link>
         ))}
       </div>
+      )}
     </SocketContext.Provider>
   );
 }
